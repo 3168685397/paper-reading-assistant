@@ -22,3 +22,11 @@ export function isPdfTextLayerRange(range: Range): boolean {
   const start = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement;
   return start?.closest(".textLayer") !== null;
 }
+
+export function isReadyPdfTextLayerRange(range: Range): boolean {
+  const start = pageElement(range.startContainer);
+  const end = pageElement(range.endContainer);
+  return start !== null
+    && start === end
+    && start.getAttribute("data-text-layer-ready") === "true";
+}

@@ -8,7 +8,8 @@ import "../shared.css";
 import "./style.css";
 import App from "./App";
 import { startSelectionTranslationUi } from "../../src/lib/popover/controller";
-import { cleanPdfSelection, isPdfTextLayerRange, isSinglePdfPageRange } from "../../src/features/pdf/PdfTextSelection";
+import { cleanPdfSelection, isPdfTextLayerRange, isReadyPdfTextLayerRange, isSinglePdfPageRange } from "../../src/features/pdf/PdfTextSelection";
+import { PDF_SELECTION_RESET_EVENT } from "../../src/features/pdf/pdfPageRendering";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 const licenseNotice = document.createElement("script");
@@ -20,8 +21,9 @@ document.head.append(licenseNotice);
 void startSelectionTranslationUi({
   forceButtonMode: true,
   transformSelection: cleanPdfSelection,
-  validateRange: (range) => isPdfTextLayerRange(range) && isSinglePdfPageRange(range),
+  validateRange: (range) => isPdfTextLayerRange(range) && isSinglePdfPageRange(range) && isReadyPdfTextLayerRange(range),
   onInvalidRange: () => window.dispatchEvent(new CustomEvent("pdf-selection-error")),
+  resetEvent: PDF_SELECTION_RESET_EVENT,
   pageTitle: "PDF Reader",
   pageUrl: ""
 });

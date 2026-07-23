@@ -6,6 +6,7 @@ import { PdfToolbar } from "../../src/features/pdf/PdfToolbar";
 import { fetchPdfBytes } from "../../src/features/pdf/pdfLoader";
 import { PdfReaderError, toPdfReaderError } from "../../src/features/pdf/pdfErrors";
 import { createLocalPdfSource, isPdfFile, parseRemotePdfUrl, type LocalPdfSource } from "../../src/features/pdf/pdfSource";
+import { clearPdfSelection } from "../../src/features/pdf/pdfPageRendering";
 import { getPdfMessages, preferredPdfLocale, type PdfLocale } from "../../src/locales/pdf";
 
 function sourceName(url: URL): string {
@@ -150,6 +151,14 @@ export default function App() {
   }, [pdf?.numPages]);
 
   const readerError = error ? (error === "NOT_PDF" ? messages.invalid : error) : "";
+  const changeScale = (nextScale: number) => {
+    clearPdfSelection();
+    setScale(nextScale);
+  };
+  const rotate = () => {
+    clearPdfSelection();
+    setRotation((value) => (value + 90) % 360);
+  };
 
   return <div className="pdf-app" data-sidebar={sidebar}>
     <PdfToolbar
@@ -159,8 +168,8 @@ export default function App() {
       pages={pdf?.numPages ?? 0}
       scale={scale}
       onPage={jump}
-      onScale={setScale}
-      onRotate={() => setRotation((value) => (value + 90) % 360)}
+      onScale={changeScale}
+      onRotate={rotate}
       onOpen={() => fileInput.current?.click()}
       onToggleSidebar={() => setSidebar((value) => !value)}
       onSettings={() => void chrome.runtime.openOptionsPage()}

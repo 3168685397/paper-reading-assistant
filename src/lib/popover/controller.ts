@@ -19,6 +19,7 @@ export interface SelectionTranslationUiOptions {
   transformSelection?: (text: string) => string;
   validateRange?: (range: Range) => boolean;
   onInvalidRange?: () => void;
+  resetEvent?: string;
   pageTitle?: string;
   pageUrl?: string;
 }
@@ -78,6 +79,12 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
       grammar = undefined;
       draggable.resetManualPosition();
     };
+
+    const resetSelectionUi = () => {
+      window.getSelection()?.removeAllRanges();
+      close();
+    };
+    if (options.resetEvent) addEventListener(options.resetEvent, resetSelectionUi);
 
     const renderShell = () => {
       ui.popover.replaceChildren();
@@ -377,5 +384,8 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
       useSelection(message.payload.text, rect, selection?.rangeCount ? selection.getRangeAt(0) : undefined);
       void translate();
     });
-    addEventListener("pagehide", () => draggable.destroy(), { once: true });
+    addEventListener("pagehide", () => {
+      if (options.resetEvent) removeEventListener(options.resetEvent, resetSelectionUi);
+      draggable.destroy();
+    }, { once: true });
 }

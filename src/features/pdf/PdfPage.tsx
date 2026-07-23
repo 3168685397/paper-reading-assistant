@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { TextLayer, type PDFDocumentProxy, type RenderTask } from "pdfjs-dist";
+import { cancelPageLayers, createPageLayerPlan, createPageViewport, RenderGeneration } from "./pdfPageRendering";
 
 interface Props {
   document: PDFDocumentProxy;
@@ -14,8 +15,9 @@ export function PdfPage({ document: pdf, pageNumber, scale, rotation, onVisible,
   const shellRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
+  const generationRef = useRef(new RenderGeneration());
   const [visible, setVisible] = useState(pageNumber <= 2);
-  const [aspect, setAspect] = useState(1.414);
+  const [dimensions, setDimensions] = useState({ width: 816 * scale, height: 1056 * scale });
 
   useEffect(() => {
     const shell = shellRef.current;
@@ -35,61 +37,81 @@ export function PdfPage({ document: pdf, pageNumber, scale, rotation, onVisible,
   }, [onVisible, pageNumber]);
 
   useEffect(() => {
-    if (!visible) return;
+    const shell = shellRef.current;
+    if (!shell) return;
+    shell.dataset.textLayerReady = "false";
+    if (!visible) {
+      generationRef.current.invalidate();
+      return;
+    }
+    const generation = generationRef.current.begin();
     let disposed = false;
     let renderTask: RenderTask | undefined;
     let textLayer: TextLayer | undefined;
+    const isCurrent = () => !disposed && generationRef.current.isCurrent(generation);
     void (async () => {
       const page = await pdf.getPage(pageNumber);
-      if (disposed) return;
-      const viewport = page.getViewport({ scale, rotation });
-      setAspect(viewport.height / viewport.width);
+      if (!isCurrent()) return;
+      const viewport = createPageViewport(page, scale, rotation);
+      const plan = createPageLayerPlan(viewport, window.devicePixelRatio);
+      setDimensions({ width: plan.cssWidth, height: plan.cssHeight });
       const canvas = canvasRef.current;
       const text = textRef.current;
-      if (!canvas || !text) return;
-      const ratio = Math.min(devicePixelRatio || 1, 2);
-      canvas.width = Math.floor(viewport.width * ratio);
-      canvas.height = Math.floor(viewport.height * ratio);
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
+      if (!canvas || !text || !isCurrent()) return;
+      shell.style.setProperty("--scale-factor", String(viewport.scale));
+      shell.style.setProperty("--user-unit", String(viewport.userUnit));
+      shell.style.setProperty("--scale-round-x", "1px");
+      shell.style.setProperty("--scale-round-y", "1px");
+      canvas.width = plan.canvasWidth;
+      canvas.height = plan.canvasHeight;
+      canvas.style.width = `${plan.cssWidth}px`;
+      canvas.style.height = `${plan.cssHeight}px`;
       text.replaceChildren();
-      text.style.width = `${viewport.width}px`;
-      text.style.height = `${viewport.height}px`;
+      text.style.width = `${plan.cssWidth}px`;
+      text.style.height = `${plan.cssHeight}px`;
       const context = canvas.getContext("2d");
       if (!context) return;
-      renderTask = page.render({ canvas, canvasContext: context, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] });
+      renderTask = page.render({
+        canvas,
+        canvasContext: context,
+        viewport: plan.viewport,
+        transform: plan.canvasTransform
+      });
       const content = await page.getTextContent();
-      if (disposed) return;
+      if (!isCurrent()) return;
       const count = content.items.reduce((sum, item) => sum + ("str" in item ? item.str.trim().length : 0), 0);
       onTextCount(pageNumber, count);
-      textLayer = new TextLayer({ textContentSource: content, container: text, viewport });
+      textLayer = new TextLayer({ textContentSource: content, container: text, viewport: plan.viewport });
       await Promise.all([renderTask.promise, textLayer.render()]);
+      if (!isCurrent()) return;
+      shell.dataset.textLayerReady = "true";
     })().catch((error: unknown) => {
-      if (!disposed && !(error instanceof Error && error.name === "RenderingCancelledException")) throw error;
+      if (isCurrent() && !(error instanceof Error && ["RenderingCancelledException", "AbortException"].includes(error.name))) {
+        shell.dataset.textLayerError = "true";
+      }
     });
     return () => {
       disposed = true;
-      renderTask?.cancel();
-      textLayer?.cancel();
+      generationRef.current.invalidate();
+      shell.dataset.textLayerReady = "false";
+      cancelPageLayers(renderTask, textLayer, textRef.current ?? undefined);
       const canvas = canvasRef.current;
       if (canvas) {
         canvas.width = 0;
         canvas.height = 0;
       }
-      textRef.current?.replaceChildren();
     };
   }, [pdf, pageNumber, rotation, scale, visible, onTextCount]);
 
-  const width = 816 * scale;
   return <article
     ref={shellRef}
     className="pdf-page"
     data-pdf-page-number={pageNumber}
-    style={{ width, minHeight: width * aspect }}
+    style={{ width: dimensions.width, height: dimensions.height }}
     aria-label={`Page ${pageNumber}`}
   >
     {visible && <>
-      <canvas ref={canvasRef} aria-hidden="true"/>
+      <canvas ref={canvasRef} className="canvas-layer" aria-hidden="true"/>
       <div ref={textRef} className="textLayer"/>
     </>}
     <span className="pdf-page-number">{pageNumber}</span>
