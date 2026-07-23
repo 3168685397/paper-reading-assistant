@@ -2,7 +2,7 @@
 
 # Contributing
 
-Thank you for contributing to Science Reader.
+Thank you for contributing to Paper Reading Assistant.
 
 ## Workflow
 

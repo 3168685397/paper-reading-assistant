@@ -1,4 +1,4 @@
-# Science Reader VERSION
+# Paper Reading Assistant VERSION
 
 ## English
 

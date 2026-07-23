@@ -1,4 +1,4 @@
-# Science Reader 开发约定
+# Paper Reading Assistant 开发约定
 
 - TypeScript 保持 strict，不使用 `any` 绕过类型检查。
 - Content Script 不得读取 `chrome.storage.local` 中的模型配置或 API Key。

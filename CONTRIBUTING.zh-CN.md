@@ -2,7 +2,7 @@
 
 # 贡献指南
 
-感谢你为 Science Reader 做出贡献。
+感谢你为 Paper Reading Assistant 做出贡献。
 
 ## 工作流程
 

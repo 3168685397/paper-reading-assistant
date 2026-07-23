@@ -37,5 +37,5 @@ export async function attachGrammar(original: string, grammar: HistoryRecord["gr
 export function recordToMarkdown(record: HistoryRecord): string {
   const pairs = record.translation.pairs.map((p) => `${p.english}\n\n${p.chinese}`).join("\n\n---\n\n");
   const grammar = record.grammar ? `\n\n## 语法分析\n\n${record.grammar.sentences.map((s) => `### ${s.sentence}\n\n- 主干：${s.mainStructure}\n- 主语：${s.subject.text} — ${s.subject.explanation}\n- 谓语：${s.predicate.text} — ${s.predicate.explanation}\n- 宾语/补语：${s.objectOrComplement.text} — ${s.objectOrComplement.explanation}\n- 逻辑：${s.logic}`).join("\n\n")}` : "";
-  return `# Science 精读笔记\n\n> ${record.pageTitle}\n> ${record.pageUrl}\n\n## 中英对照\n\n${pairs}\n\n## 核心意思\n\n${record.translation.summary}${grammar}`;
+  return `# 论文精读笔记\n\n> ${record.pageTitle}\n> ${record.pageUrl}\n\n## 中英对照\n\n${pairs}\n\n## 核心意思\n\n${record.translation.summary}${grammar}`;
 }

@@ -17,7 +17,7 @@ describe("history", () => {
   });
   it("导出完整 Markdown", () => {
     const output = recordToMarkdown(record("1"));
-    expect(output).toContain("# Science 精读笔记");
+    expect(output).toContain("# 论文精读笔记");
     expect(output).toContain("## 中英对照");
     expect(output).toContain("## 核心意思");
   });

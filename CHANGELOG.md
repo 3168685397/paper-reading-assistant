@@ -1,8 +1,8 @@
 # Changelog / 变更记录
 
-All notable changes to Science Reader are documented here.
+All notable changes to Paper Reading Assistant are documented here.
 
-Science Reader 的重要变更记录于此。
+Paper Reading Assistant 的重要变更记录于此。
 
 ## 0.1.0
 

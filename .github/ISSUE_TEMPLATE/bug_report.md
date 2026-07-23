@@ -23,7 +23,7 @@ Briefly describe the problem.
 
 ## Environment / 环境
 
-- Science Reader version / 版本:
+- Paper Reading Assistant version / 版本:
 - Chrome version / Chrome版本:
 - Operating system / 操作系统:
 

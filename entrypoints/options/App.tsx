@@ -23,7 +23,7 @@ export default function App() {
     await chrome.storage.local.set({ history: next });
     setHistory(next);
   };
-  return <main className="options"><header><div className="eyebrow">SCIENCE READER</div><h1>模型与阅读设置</h1><p className="muted">配置由浏览器保存在本机，仅可信扩展页面可以读取。</p></header>
+  return <main className="options"><header><div className="eyebrow">PAPER READING ASSISTANT</div><h1>论文精读助手设置</h1><p className="muted">配置由浏览器保存在本机，仅可信扩展页面可以读取。</p></header>
     <h2>OpenAI-compatible API</h2><div className="form">
       <label className="field"><span className="label">API Base URL</span><input type="url" value={config.apiBaseUrl} onChange={e=>field("apiBaseUrl",e.target.value)} placeholder="https://api.openai.com/v1"/></label>
       <label className="field"><span className="label">Model</span><input type="text" value={config.model} onChange={e=>field("model",e.target.value)} placeholder="gpt-4.1-mini"/></label>

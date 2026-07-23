@@ -21,7 +21,7 @@ export function mountScienceReaderRoot(documentRef: Document, css: string): Read
   const popover = documentRef.createElement("section");
   popover.className = "sr-popover";
   popover.setAttribute("role", "dialog");
-  popover.setAttribute("aria-label", "Science Reader 翻译");
+  popover.setAttribute("aria-label", "论文精读助手翻译");
   popover.hidden = true;
   shadow.append(style, trigger, popover);
   documentRef.documentElement.append(host);

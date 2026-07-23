@@ -86,7 +86,7 @@ export default defineContentScript({
       if (!payload) return;
       const pairs = translation?.pairs.map((pair) => `${pair.chinese}\n\n${pair.english}`).join("\n\n---\n\n") ?? payload.text;
       const summary = translation ? `\n\n## 核心意思\n\n${translation.summary}` : "";
-      await navigator.clipboard.writeText(`# Science 精读笔记\n\n## 翻译\n\n${pairs}${summary}`);
+      await navigator.clipboard.writeText(`# 论文精读笔记\n\n## 翻译\n\n${pairs}${summary}`);
     };
 
     const renderLoading = (label = "翻译中") => {
