@@ -1,7 +1,7 @@
 import { openAiCompatible } from "../src/lib/llm/openaiCompatible";
 import { replaceAbortController } from "../src/lib/llm/requestControl";
 import { attachGrammar, getConfig, saveRecord, toContentSettings } from "../src/lib/storage";
-import { chromeRegistrationApi, injectIntoOpenPages, syncContentScriptRegistration, WEBSITE_ORIGINS } from "../src/lib/permissions/contentScriptRegistration";
+import { chromeRegistrationApi, createRegistrationSynchronizer, injectIntoOpenPages, WEBSITE_ORIGINS } from "../src/lib/permissions/contentScriptRegistration";
 import { normalizeHostname } from "../src/lib/sites";
 import { isLikelyPdfUrl, parseRemotePdfUrl } from "../src/features/pdf/pdfSource";
 import type { RuntimeRequest } from "../src/types";
@@ -32,23 +32,31 @@ export default defineBackground(() => {
   chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
   chrome.action.onClicked.addListener(() => { void chrome.runtime.openOptionsPage(); });
 
-  const syncRegistration = () => syncContentScriptRegistration(chromeRegistrationApi());
+  const syncRegistration = createRegistrationSynchronizer(chromeRegistrationApi());
+  const safelySyncRegistration = async () => {
+    try {
+      return await syncRegistration();
+    } catch (error) {
+      debug("content-script:sync-error", error instanceof Error ? error.name : "unknown");
+      return undefined;
+    }
+  };
 
-  void syncRegistration();
-  chrome.runtime.onStartup.addListener(() => { void syncRegistration(); });
+  void safelySyncRegistration();
+  chrome.runtime.onStartup.addListener(() => { void safelySyncRegistration(); });
   chrome.permissions.onAdded.addListener((permissions) => {
     if (permissions.origins?.some((origin) => WEBSITE_ORIGINS.includes(origin as typeof WEBSITE_ORIGINS[number]))) {
-      void syncRegistration().then(() => injectIntoOpenPages());
+      void safelySyncRegistration().then((result) => result === undefined ? undefined : injectIntoOpenPages());
     }
   });
   chrome.permissions.onRemoved.addListener((permissions) => {
     if (permissions.origins?.some((origin) => WEBSITE_ORIGINS.includes(origin as typeof WEBSITE_ORIGINS[number]))) {
-      void syncRegistration();
+      void safelySyncRegistration();
     }
   });
 
   chrome.runtime.onInstalled.addListener(() => {
-    void syncRegistration();
+    void safelySyncRegistration();
     chrome.contextMenus.removeAll(() => chrome.contextMenus.create({
       id: "paper-reading-assistant-selection",
       title: "翻译并精读选中文本",
