@@ -1,0 +1,87 @@
+import { openAiCompatible } from "../src/lib/llm/openaiCompatible";
+import { replaceAbortController } from "../src/lib/llm/requestControl";
+import { attachGrammar, getConfig, saveRecord } from "../src/lib/storage";
+import type { RuntimeRequest } from "../src/types";
+
+let activeController: AbortController | undefined;
+let activeJob: Promise<unknown> | undefined;
+
+async function runExclusive<T>(job: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  if (activeJob) {
+    activeController?.abort();
+    try { await activeJob; } catch { /* replaced by the new request */ }
+  }
+  activeController = replaceAbortController(activeController);
+  const timeout = setTimeout(() => activeController?.abort("timeout"), 30_000);
+  activeJob = job(activeController.signal);
+  try { return await activeJob as T; }
+  finally {
+    clearTimeout(timeout);
+    activeController = undefined;
+    activeJob = undefined;
+  }
+}
+
+export default defineBackground(() => {
+  chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
+  chrome.action.onClicked.addListener(() => { void chrome.runtime.openOptionsPage(); });
+
+  chrome.runtime.onInstalled.addListener(() => {
+    chrome.contextMenus.create({
+      id: "science-reader-selection",
+      title: "翻译并精读选中文本",
+      contexts: ["selection"],
+      documentUrlPatterns: ["https://www.science.org/*"]
+    });
+  });
+
+  chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (info.menuItemId !== "science-reader-selection" || !info.selectionText || !tab?.id) return;
+    void chrome.tabs.sendMessage(tab.id, {
+      type: "CONTEXT_SELECTION",
+      payload: {
+        text: info.selectionText.slice(0, 5000),
+        title: tab.title ?? "",
+        url: tab.url ?? "",
+        selectedAt: Date.now()
+      }
+    } satisfies RuntimeRequest);
+  });
+
+  chrome.runtime.onMessage.addListener((message: RuntimeRequest, sender, respond) => {
+    if (message.type === "CANCEL_REQUEST") {
+      activeController?.abort();
+      respond({ ok: true });
+      return;
+    }
+    if (message.type === "OPEN_OPTIONS") {
+      void chrome.runtime.openOptionsPage().then(() => respond({ ok: true }));
+      return true;
+    }
+    if (message.type === "TRANSLATE") {
+      void (async () => {
+        const config = await getConfig();
+        if (!config.apiKey || !config.apiBaseUrl || !config.model) throw new Error("请先在设置中完成模型配置。");
+        const result = await runExclusive((signal) => openAiCompatible.translate(message.payload, config, signal));
+        if (config.saveHistory) {
+          await saveRecord({
+            id: crypto.randomUUID(), original: message.payload.text, translation: result,
+            pageTitle: message.payload.title, pageUrl: message.payload.url, createdAt: Date.now()
+          });
+        }
+        return { ok: true, result, saved: config.saveHistory };
+      })().then(respond).catch((error: unknown) => respond({ ok: false, error: error instanceof Error ? error.message : "翻译失败" }));
+      return true;
+    }
+    if (message.type === "ANALYZE") {
+      void (async () => {
+        const config = await getConfig();
+        if (!config.apiKey || !config.apiBaseUrl || !config.model) throw new Error("请先在设置中完成模型配置。");
+        const result = await runExclusive((signal) => openAiCompatible.analyze(message.payload, config, signal));
+        if (config.saveHistory) await attachGrammar(message.payload.text, result);
+        return { ok: true, result, saved: config.saveHistory };
+      })().then(respond).catch((error: unknown) => respond({ ok: false, error: error instanceof Error ? error.message : "分析失败" }));
+      return true;
+    }
+  });
+});
