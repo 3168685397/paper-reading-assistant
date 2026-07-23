@@ -18,11 +18,23 @@ export interface RegistrationApi {
   unregister(id: string): Promise<void>;
 }
 
+function isDuplicateRegistrationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /duplicate script id/i.test(message);
+}
+
 export async function syncContentScriptRegistration(api: RegistrationApi): Promise<"registered" | "unregistered" | "unchanged"> {
   const [allowed, registered] = await Promise.all([api.hasPermission(), api.getRegistered()]);
   const exists = registered.some((script) => script.id === CONTENT_SCRIPT_ID);
   if (allowed && !exists) {
-    await api.register(CONTENT_SCRIPT_REGISTRATION);
+    try {
+      await api.register(CONTENT_SCRIPT_REGISTRATION);
+    } catch (error) {
+      if (!isDuplicateRegistrationError(error)) throw error;
+      const latest = await api.getRegistered();
+      if (!latest.some((script) => script.id === CONTENT_SCRIPT_ID)) throw error;
+      return "unchanged";
+    }
     return "registered";
   }
   if (!allowed && exists) {
@@ -30,6 +42,19 @@ export async function syncContentScriptRegistration(api: RegistrationApi): Promi
     return "unregistered";
   }
   return "unchanged";
+}
+
+export function createRegistrationSynchronizer(
+  api: RegistrationApi
+): () => Promise<"registered" | "unregistered" | "unchanged"> {
+  let active: Promise<"registered" | "unregistered" | "unchanged"> | undefined;
+  return () => {
+    if (active) return active;
+    active = syncContentScriptRegistration(api).finally(() => {
+      active = undefined;
+    });
+    return active;
+  };
 }
 
 export function chromeRegistrationApi(): RegistrationApi {

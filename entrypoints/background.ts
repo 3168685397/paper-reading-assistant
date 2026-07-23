@@ -1,8 +1,9 @@
 import { openAiCompatible } from "../src/lib/llm/openaiCompatible";
 import { replaceAbortController } from "../src/lib/llm/requestControl";
 import { attachGrammar, getConfig, saveRecord, toContentSettings } from "../src/lib/storage";
-import { chromeRegistrationApi, injectIntoOpenPages, syncContentScriptRegistration, WEBSITE_ORIGINS } from "../src/lib/permissions/contentScriptRegistration";
+import { chromeRegistrationApi, createRegistrationSynchronizer, injectIntoOpenPages, WEBSITE_ORIGINS } from "../src/lib/permissions/contentScriptRegistration";
 import { normalizeHostname } from "../src/lib/sites";
+import { isLikelyPdfUrl, parseRemotePdfUrl } from "../src/features/pdf/pdfSource";
 import type { RuntimeRequest } from "../src/types";
 
 let activeController: AbortController | undefined;
@@ -25,26 +26,37 @@ async function runExclusive<T>(job: (signal: AbortSignal) => Promise<T>): Promis
 }
 
 export default defineBackground(() => {
+  const debug = (...values: unknown[]) => {
+    if (import.meta.env.DEV) console.debug("[Paper Reading Assistant]", ...values);
+  };
   chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
   chrome.action.onClicked.addListener(() => { void chrome.runtime.openOptionsPage(); });
 
-  const syncRegistration = () => syncContentScriptRegistration(chromeRegistrationApi());
+  const syncRegistration = createRegistrationSynchronizer(chromeRegistrationApi());
+  const safelySyncRegistration = async () => {
+    try {
+      return await syncRegistration();
+    } catch (error) {
+      debug("content-script:sync-error", error instanceof Error ? error.name : "unknown");
+      return undefined;
+    }
+  };
 
-  void syncRegistration();
-  chrome.runtime.onStartup.addListener(() => { void syncRegistration(); });
+  void safelySyncRegistration();
+  chrome.runtime.onStartup.addListener(() => { void safelySyncRegistration(); });
   chrome.permissions.onAdded.addListener((permissions) => {
     if (permissions.origins?.some((origin) => WEBSITE_ORIGINS.includes(origin as typeof WEBSITE_ORIGINS[number]))) {
-      void syncRegistration().then(() => injectIntoOpenPages());
+      void safelySyncRegistration().then((result) => result === undefined ? undefined : injectIntoOpenPages());
     }
   });
   chrome.permissions.onRemoved.addListener((permissions) => {
     if (permissions.origins?.some((origin) => WEBSITE_ORIGINS.includes(origin as typeof WEBSITE_ORIGINS[number]))) {
-      void syncRegistration();
+      void safelySyncRegistration();
     }
   });
 
   chrome.runtime.onInstalled.addListener(() => {
-    void syncRegistration();
+    void safelySyncRegistration();
     chrome.contextMenus.removeAll(() => chrome.contextMenus.create({
       id: "paper-reading-assistant-selection",
       title: "翻译并精读选中文本",
@@ -90,7 +102,26 @@ export default defineBackground(() => {
       }));
       return true;
     }
+    if (message.type === "CHECK_PDF_URL") {
+      void (async () => {
+        const url = parseRemotePdfUrl(message.url);
+        if (!url) return { ok: true, result: false };
+        if (isLikelyPdfUrl(url.href)) return { ok: true, result: true };
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8_000);
+        try {
+          const response = await fetch(url, { method: "HEAD", credentials: "include", signal: controller.signal });
+          return { ok: true, result: response.ok && response.headers.get("content-type")?.toLowerCase().includes("application/pdf") === true };
+        } catch {
+          return { ok: true, result: false };
+        } finally {
+          clearTimeout(timeout);
+        }
+      })().then(respond);
+      return true;
+    }
     if (message.type === "TRANSLATE") {
+      debug("background:received", { type: message.type, length: message.payload.text.length });
       void (async () => {
         const config = await getConfig();
         if (!config.apiKey || !config.apiBaseUrl || !config.model) throw new Error("请先在设置中完成模型配置。");
@@ -102,7 +133,13 @@ export default defineBackground(() => {
           });
         }
         return { ok: true, result, saved: config.saveHistory };
-      })().then(respond).catch((error: unknown) => respond({ ok: false, error: error instanceof Error ? error.message : "翻译失败" }));
+      })().then((result) => {
+        debug("request:success");
+        respond(result);
+      }).catch((error: unknown) => {
+        debug("request:error", error instanceof Error ? error.name : "unknown");
+        respond({ ok: false, error: error instanceof Error ? error.message : "翻译失败" });
+      });
       return true;
     }
     if (message.type === "ANALYZE") {

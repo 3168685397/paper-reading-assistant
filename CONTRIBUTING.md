@@ -22,6 +22,7 @@ Thank you for contributing to Paper Reading Assistant.
 - Keep HTTP/HTTPS access optional and runtime-registered; do not add static broad host access.
 - Preserve Shadow DOM isolation and the existing minimalist interface.
 - Add tests for behavior changes, including ordinary sites, form controls, exclusions, permission revocation, and privacy boundaries.
+- For PDF changes, test local and remote files, Text Layer selection, rendering cancellation, scanned files, passwords, and ensure complete documents never enter model requests.
 - Run `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm zip` before release work.
 
 ## Sensitive information

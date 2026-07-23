@@ -11,7 +11,7 @@ export default defineConfig({
     name: "Paper Reading Assistant · 论文精读助手",
     description: "翻译和精读网页中选中的英文文本。",
     minimum_chrome_version: "116",
-    permissions: ["storage", "contextMenus", "scripting"],
+    permissions: ["storage", "contextMenus", "scripting", "activeTab"],
     optional_host_permissions: ["http://*/*", "https://*/*"],
     action: { default_title: "论文精读助手" }
   }

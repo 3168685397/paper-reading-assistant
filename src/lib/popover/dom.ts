@@ -12,6 +12,7 @@ export function hasReaderRoot(documentRef: Document): boolean {
 }
 
 export function mountScienceReaderRoot(documentRef: Document, css: string): ReaderMount {
+  documentRef.querySelectorAll(`[id="${ROOT_ID}"]`).forEach((node) => node.remove());
   const host = documentRef.createElement("div");
   host.id = ROOT_ID;
   host.style.cssText = "all:initial;position:fixed;inset:0 auto auto 0;width:0;height:0;z-index:2147483647;pointer-events:none;";

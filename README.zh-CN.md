@@ -29,6 +29,12 @@
 - 只保存域名的网站排除列表
 - 可配置 OpenAI-compatible API，并保存最多 50 条本地阅读记录
 
+## PDF 阅读器
+
+0.3.0 新增扩展内部的远程与本地文本型 PDF 阅读模式。用户可以通过扩展菜单打开 PDF 链接，或在阅读器内选择本地 PDF。PDF.js 与 worker 均打包在扩展内部，文件只在本地通过 Canvas 和可选择的 Text Layer 解析。
+
+完整 PDF 永远不会发送给模型。只有用户明确选中的文字会复用现有翻译和精读请求。扩展不会向 Chrome 内置 PDF 阅读器注入。扫描版或纯图片 PDF 暂不支持 OCR；需要登录的远程 PDF 可能需要先下载再本地打开。
+
 ## API 设置
 
 在扩展设置中配置 API Base URL、模型、API Key 和目标语言。服务商需要兼容 OpenAI chat completions。API Key 保存在受信任的扩展存储中，模型请求只由 Background Service Worker 执行。
@@ -48,7 +54,7 @@ pnpm build
 pnpm zip
 ```
 
-未打包扩展生成于 `.output/chrome-mv3/`，正式安装包为 `.output/paper-reading-assistant-0.2.0-chrome.zip`。
+未打包扩展生成于 `.output/chrome-mv3/`，开发安装包为 `.output/paper-reading-assistant-0.3.0-chrome.zip`。
 
 ## 隐私与权限
 
@@ -57,6 +63,7 @@ pnpm zip
 - `storage`：受信任的模型设置、域名排除项和本地阅读记录
 - `contextMenus`：选中文本右键入口
 - `scripting`：授权后动态注册内容脚本
+- `activeTab`：仅在用户打开扩展菜单并启动 PDF 阅读器时检查当前标签页
 - 可选的 `http://*/*` 与 `https://*/*`：仅在用户启用网站访问时请求
 - API 域名：保存 API 配置时请求
 
@@ -66,14 +73,18 @@ Content Script 无法读取 API Key。排除列表只保存域名，不保存完
 
 - 不支持浏览器内部页面、扩展页面、Chrome Web Store、`file://`、FTP、`view-source:` 和其他受保护页面。
 - 图片或 canvas 中的文字需要未来 OCR 支持。
-- 浏览器 PDF 阅读器可能限制注入或选区行为。
+- 不向 Chrome 内置 PDF 阅读器注入，请使用扩展内部 PDF 阅读器。
+- 扫描版、纯图片 PDF 和 canvas 文字暂不支持 OCR。
+- 第一版将跨页 PDF 选择限制为单页。
+- 数学公式与双栏阅读顺序需要重点测试。
+- 登录保护或临时远程 PDF 链接可能需要先下载。
 - 跨域 iframe 中的悬浮卡片只能显示在该 iframe 的视口内。
 - 无法观察封闭 Shadow DOM 内的选区。
 - 用户必须自行提供兼容的模型 API。
 
 ## 公开测试
 
-`v0.2.0` 当前只在功能分支开发，尚未发布。人工测试应覆盖学术网站、新闻、博客、表格、SPA、多列布局、表单控件、iframe、深色页面和超长选区。提交报告前请删除 API Key、私人文本和个人信息。
+`v0.2.0` 已发布，`v0.3.0` PDF 阅读模式正在功能分支开发。提交报告前请删除 API Key、私人文本、PDF 密码和个人信息。
 
 ## 路线图
 

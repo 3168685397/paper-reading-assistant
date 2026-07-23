@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CONTENT_SCRIPT_ID,
   CONTENT_SCRIPT_REGISTRATION,
+  createRegistrationSynchronizer,
   syncContentScriptRegistration,
   type RegistrationApi
 } from "../src/lib/permissions/contentScriptRegistration";
@@ -40,6 +41,35 @@ describe("runtime content script registration", () => {
     const mock = api(true, true);
     expect(await syncContentScriptRegistration(mock)).toBe("unchanged");
     expect(mock.register).not.toHaveBeenCalled();
+  });
+
+  it("coalesces concurrent startup, install, and permission sync calls", async () => {
+    let releasePermission!: () => void;
+    const permissionReady = new Promise<void>((resolve) => { releasePermission = resolve; });
+    const mock = api(true, false);
+    mock.hasPermission = async () => {
+      await permissionReady;
+      return true;
+    };
+    const synchronize = createRegistrationSynchronizer(mock);
+    const startup = synchronize();
+    const installed = synchronize();
+    const permissionAdded = synchronize();
+    expect(startup).toBe(installed);
+    expect(installed).toBe(permissionAdded);
+    releasePermission();
+    await Promise.all([startup, installed, permissionAdded]);
+    expect(mock.register).toHaveBeenCalledOnce();
+  });
+
+  it("recovers when Chrome reports an already-registered script from another worker", async () => {
+    const mock = api(true, false);
+    mock.register.mockRejectedValueOnce(new Error("Duplicate script ID 'paper-reading-assistant-selection'"));
+    mock.getRegistered = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ ...CONTENT_SCRIPT_REGISTRATION }]);
+    expect(await syncContentScriptRegistration(mock)).toBe("unchanged");
+    expect(mock.register).toHaveBeenCalledOnce();
   });
 
   it("unregisters when website access is revoked", async () => {
