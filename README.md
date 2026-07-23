@@ -2,61 +2,42 @@
 
 # Paper Reading Assistant
 
-A minimalist Chrome extension for translating and studying selected text in academic papers.
+A minimalist Chrome extension for translating and studying selected English text on websites.
 
 ## Screenshot
 
-<!-- Product screenshot placeholder: save a real, privacy-reviewed 1280×640 screenshot as docs/images/hero.png, then replace this comment with: ![Paper Reading Assistant in-page translation popover](./docs/images/hero.png) -->
+<!-- Save a real, privacy-reviewed 1280×640 screenshot as docs/images/hero.png, then replace this comment with: ![Paper Reading Assistant translation popover](./docs/images/hero.png) -->
 
 ## Quick Start
 
-1. Download the latest Chrome ZIP from [GitHub Releases](https://github.com/3168685397/paper-reading-assistant/releases/latest).
-2. Extract the ZIP file. The ZIP cannot be dragged directly into Chrome.
-3. Open `chrome://extensions/`.
-4. Enable **Developer mode**.
-5. Click **Load unpacked**.
-6. Select the extracted extension directory.
-7. Open the extension settings and configure your own OpenAI-compatible API.
+1. Download the Chrome ZIP from GitHub Releases.
+2. Extract the ZIP; it cannot be installed by dragging the ZIP into Chrome.
+3. Open `chrome://extensions/`, enable **Developer mode**, and click **Load unpacked**.
+4. Select the extracted extension directory.
+5. Open extension settings and configure your own OpenAI-compatible API.
+6. Click **Enable on all websites** and approve access to normal HTTP/HTTPS pages.
 
-Users must provide their own compatible model API. The project does not include a public API key and is not currently published in the Chrome Web Store.
-
-## Public Beta
-
-Version `v0.1.0` is a public beta. Bug reports and focused feature suggestions are welcome in the [public beta feedback Issue](https://github.com/3168685397/paper-reading-assistant/issues/1).
-
-Before submitting an Issue, remove API keys, private paper content, and personal information. The current version primarily targets `science.org`; Nature, PubMed, and arXiv are not officially supported yet.
+The project includes no public API key and is not currently in the Chrome Web Store.
 
 ## Core Features
 
-- In-page selected-text translation on Science pages
-- Draggable frosted-glass popover constrained to the visible viewport
-- Chinese translation, core meaning, and original English in a clear reading order
-- On-demand sentence structure and grammar analysis
-- Context-aware academic vocabulary for Chinese learners
-- Separate translation and grammar requests
-- Configurable OpenAI-compatible API, model, key, and target language
-- Up to 50 deduplicated local reading records with Markdown export
-- Timeout, cancellation, retry, and readable network, authentication, rate-limit, and JSON errors
+- Selected-English-text translation on ordinary HTTP and HTTPS websites
+- Selection support for standard DOM text, open Shadow DOM, contenteditable, textarea, and text input
+- Button, automatic, and disabled selection modes; button mode is the default
+- Draggable, viewport-constrained Shadow DOM popover
+- Chinese translation, core meaning, original English, sentence structure, grammar, and academic vocabulary
+- Domain-only exclusion list
+- Configurable OpenAI-compatible API and up to 50 local reading records
 
 ## API Setup
 
-Open **Extension options** from the extension details page and configure:
+Configure the API base URL, model, API key, and target language in extension settings. The provider must support OpenAI-compatible chat completions. API keys stay in trusted extension storage and model requests run only in the Background Service Worker.
 
-- API Base URL, for example `https://api.openai.com/v1`
-- OpenAI-compatible model name
-- API key
-- Translation language, Simplified Chinese by default
-- Automatic translation and local-history preferences
-
-Chrome requests access only to the configured API origin when settings are saved. The key is stored locally in `chrome.storage.local` and is never available to the Content Script. The provider must support the OpenAI-compatible chat completions format; some providers may not support `response_format: {"type":"json_object"}`.
+By default, model payloads contain only explicitly selected text and the required prompt. Sending the page title and URL is an explicit, off-by-default option.
 
 ## Development
 
-Requirements:
-
-- Node.js 20 or later
-- pnpm 10 or later
-- Chrome 116 or later
+Requires Node.js 20+, pnpm 10+, and Chrome 116+.
 
 ```bash
 pnpm install
@@ -67,47 +48,43 @@ pnpm build
 pnpm zip
 ```
 
-The unpacked extension is generated at `.output/chrome-mv3/`. The package is generated as `.output/paper-reading-assistant-0.1.0-chrome.zip`.
-
-Paper Reading Assistant uses WXT, React, strict TypeScript, Chrome Manifest V3, Zod, Vitest, Shadow DOM, Pointer Events, and native CSS. The Background Service Worker owns API access; the Content Script reads only explicitly selected text and renders the isolated in-page interface.
+The unpacked extension is generated at `.output/chrome-mv3/`. The production package is `.output/paper-reading-assistant-0.2.0-chrome.zip`.
 
 ## Privacy and Permissions
 
-Paper Reading Assistant does not collect browsing history, read entire papers, upload unselected page content, or include advertising, analytics, or third-party tracking. Model requests contain only the text explicitly selected by the user, the current page title and URL, and the required prompt. Processing by the configured provider is also subject to that provider's privacy policy.
+Paper Reading Assistant reads only text the user explicitly selects. It does not read entire pages, forms, or password fields; collect browsing history; inject advertising; or include analytics or a public API key.
 
-Permissions:
+- `storage`: trusted model settings, domain exclusions, and local reading records
+- `contextMenus`: selected-text command
+- `scripting`: runtime registration after permission is granted
+- optional `http://*/*` and `https://*/*`: requested only when the user enables website access
+- an API origin: requested when API configuration is saved
 
-- `storage`: model settings and local reading records
-- `contextMenus`: selected-text translation command
-- `https://www.science.org/*`: selection interaction and the in-page popover
-- `optional_host_permissions`: the API origin requested when configuration is saved
-
-The extension does not request `<all_urls>`.
+Content Scripts cannot read the API key. Exclusions store hostnames only, not full URLs. Revoking website access unregisters the Content Script.
 
 ## Known Limitations
 
-- Version `0.1.0` primarily targets `science.org`.
-- Nature, PubMed, and arXiv are not officially supported.
-- PDF support is limited.
-- A user-provided compatible model API and key are required.
-- The extension is not available in the Chrome Web Store.
-- Local history has no cloud sync or advanced search.
-- Site markup or browser behavior changes may require maintenance.
+- Browser internal pages, extension pages, the Chrome Web Store, `file://`, FTP, `view-source:`, and other protected pages are unsupported.
+- Text rendered only in images or canvas requires future OCR support.
+- Browser PDF viewers may restrict injection or selection behavior.
+- A cross-origin iframe popover remains inside that iframe's viewport.
+- Closed Shadow DOM selections are not observable.
+- A user-provided compatible model API is required.
 
-The published `v0.1.0` attachment retains a legacy filename; see the [open-source display follow-up](./docs/OPEN_SOURCE_TODO.md). The artifact remains valid.
+## Public Beta
+
+Version `v0.2.0` is under development on a feature branch and is not released yet. Testing should cover academic sites, news, blogs, tables, SPAs, multi-column layouts, form controls, iframes, dark pages, and long selections. Remove API keys, private text, and personal information before sharing reports.
 
 ## Roadmap
 
-Candidate areas include Nature, PubMed, and arXiv support, a better PDF workflow, interface language switching, vocabulary review, Markdown or Anki export, and improved error diagnostics. These are candidates, not delivery commitments.
-
-See the public [v0.2.0 roadmap Issue](https://github.com/3168685397/paper-reading-assistant/issues/2).
+Candidates include improved PDF workflows, OCR, interface language switching, vocabulary review, export, and better diagnostics. No delivery date is promised.
 
 ## Contributing
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a Pull Request. Use the bilingual Issue templates for bugs and suggestions. Report security vulnerabilities privately according to [SECURITY.md](./SECURITY.md).
+Read [CONTRIBUTING.md](./CONTRIBUTING.md). Report vulnerabilities privately according to [SECURITY.md](./SECURITY.md).
 
 ## License and Disclaimer
 
-Released under the [MIT License](./LICENSE). Changes are documented in [CHANGELOG.md](./CHANGELOG.md).
+Released under the [MIT License](./LICENSE). See [CHANGELOG.md](./CHANGELOG.md).
 
 This is an independent open-source project and is not affiliated with, endorsed by, or officially connected to Science, AAAS, Nature, OpenAI, or any model API provider.

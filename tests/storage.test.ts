@@ -4,7 +4,7 @@ import type { HistoryRecord } from "../src/types";
 
 const record = (id: string, original = "Evidence suggests."): HistoryRecord => ({
   id, original, translation: { summary: "证据表明某事。", pairs: [{ english: original, chinese: "证据表明。" }] },
-  pageTitle: "Paper", pageUrl: "https://www.science.org/x", createdAt: 1
+  pageTitle: "Paper", pageUrl: "https://example.com/article", createdAt: 1
 });
 
 describe("history", () => {

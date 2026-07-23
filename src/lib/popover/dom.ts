@@ -5,9 +5,15 @@ export interface ReaderMount {
   popover: HTMLElement;
 }
 
+export const ROOT_ID = "paper-reading-assistant-root";
+
+export function hasReaderRoot(documentRef: Document): boolean {
+  return documentRef.getElementById(ROOT_ID) !== null;
+}
+
 export function mountScienceReaderRoot(documentRef: Document, css: string): ReaderMount {
   const host = documentRef.createElement("div");
-  host.id = "science-reader-root";
+  host.id = ROOT_ID;
   host.style.cssText = "all:initial;position:fixed;inset:0 auto auto 0;width:0;height:0;z-index:2147483647;pointer-events:none;";
   const shadow = host.attachShadow({ mode: "open" });
   const style = documentRef.createElement("style");

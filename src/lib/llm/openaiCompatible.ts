@@ -42,9 +42,9 @@ async function complete(config: ModelConfig, prompt: string, signal: AbortSignal
 
 export const openAiCompatible: LlmAdapter = {
   async translate(input, config, signal) {
-    return parseModelResult(await complete(config, translationPrompt(input, config.language), signal), translationSchema);
+    return parseModelResult(await complete(config, translationPrompt(input, config.language, config.includePageContext), signal), translationSchema);
   },
   async analyze(input, config, signal) {
-    return parseModelResult(await complete(config, grammarPrompt(input), signal), grammarSchema);
+    return parseModelResult(await complete(config, grammarPrompt(input, config.includePageContext), signal), grammarSchema);
   }
 };
