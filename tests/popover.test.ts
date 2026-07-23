@@ -16,7 +16,10 @@ describe("popover interaction", () => {
     const mounted = mountScienceReaderRoot(document, "");
     expect(hasReaderRoot(document)).toBe(true);
     expect(document.querySelectorAll(`#${ROOT_ID}`)).toHaveLength(1);
-    mounted.host.remove();
+    const replacement = mountScienceReaderRoot(document, "");
+    expect(mounted.host.isConnected).toBe(false);
+    expect(document.querySelectorAll(`#${ROOT_ID}`)).toHaveLength(1);
+    replacement.host.remove();
   });
   it("keeps internal clicks and closes on outside clicks", () => {
     expect(shouldKeepPopover(true)).toBe(true);

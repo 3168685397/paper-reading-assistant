@@ -1,12 +1,14 @@
 import { calculatePopoverPosition, type ViewportRect } from "../selection/calculatePopoverPosition";
 import { isLikelyEnglishSelection, readTextControlSelection, selectionButtonPosition, validateSelection } from "../selection";
-import { element, hasReaderRoot, mountScienceReaderRoot } from "./dom";
+import { element, mountScienceReaderRoot } from "./dom";
+import { isReaderUiEvent, protectTriggerEvent } from "./events";
 import { popoverCss } from "./styles";
 import { DraggablePopover } from "../drag/draggablePopover";
 import { createAccordion } from "./accordion";
 import type { GrammarResult, TranslationResult } from "../llm/schemas";
 import { isSiteExcluded } from "../sites";
 import type { ContentSettings, RuntimeRequest, SelectionPayload } from "../../types";
+import { runtimeErrorMessage, sendMessage } from "../messaging";
 
 type Reply<T> = { ok: true; result: T; saved?: boolean } | { ok: false; error: string };
 
@@ -25,13 +27,25 @@ export interface SelectionTranslationUiOptions {
 }
 
 export async function startSelectionTranslationUi(options: SelectionTranslationUiOptions = {}): Promise<void> {
-    if (hasReaderRoot(document)) return;
-    const settingsReply = await chrome.runtime.sendMessage({ type: "GET_CONTENT_SETTINGS" }) as Reply<ContentSettings>;
+    let settingsReply: Reply<ContentSettings>;
+    try {
+      settingsReply = await sendMessage<Reply<ContentSettings>>({ type: "GET_CONTENT_SETTINGS" });
+    } catch {
+      return;
+    }
     if (!settingsReply.ok) return;
     if (!options.forceButtonMode && (settingsReply.result.selectionBehavior === "disabled" || isSiteExcluded(location.hostname, settingsReply.result.excludedSites))) return;
     const selectionBehavior = options.forceButtonMode ? "button" : settingsReply.result.selectionBehavior;
     const ui = mountScienceReaderRoot(document, popoverCss);
     const draggable = new DraggablePopover(ui.popover);
+    const isCurrentMount = () => document.getElementById(ui.host.id) === ui.host;
+    let cachedSelection: {
+      selectedText: string;
+      selectionRect: ViewportRect;
+      range?: Range;
+      frame: "top" | "iframe";
+      createdAt: number;
+    } | undefined;
     let payload: SelectionPayload | undefined;
     let rangeRect: ViewportRect | undefined;
     let selectionRange: Range | undefined;
@@ -39,10 +53,13 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
     let grammar: GrammarResult | undefined;
     let requestVersion = 0;
     let interacting = false;
+    const debug = (...values: unknown[]) => {
+      if (import.meta.env.DEV) console.debug("[Paper Reading Assistant]", ...values);
+    };
 
     const cancelRequest = () => {
       requestVersion += 1;
-      void chrome.runtime.sendMessage({ type: "CANCEL_REQUEST" });
+      void sendMessage<Reply<unknown>>({ type: "CANCEL_REQUEST" }, 2_000).catch(() => undefined);
     };
 
     const positionTrigger = () => {
@@ -73,6 +90,7 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
       ui.trigger.hidden = true;
       ui.popover.hidden = true;
       payload = undefined;
+      cachedSelection = undefined;
       rangeRect = undefined;
       selectionRange = undefined;
       translation = undefined;
@@ -121,14 +139,15 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
       });
     };
 
-    const renderError = (message: string, retry: () => void) => {
+    const renderError = (message: string, retry?: () => void, extraAction?: HTMLElement) => {
       const body = renderShell();
       body.append(element(document, "div", "sr-error", message));
       const actions = element(document, "div", "sr-actions");
-      actions.append(
-        button("重试", "sr-action sr-action-primary", retry),
-        button("打开设置", "sr-action", () => void chrome.runtime.sendMessage({ type: "OPEN_OPTIONS" }))
-      );
+      if (retry) actions.append(button("重试", "sr-action sr-action-primary", retry));
+      if (extraAction) actions.append(extraAction);
+      actions.append(button("打开设置", "sr-action", () => {
+        void sendMessage<Reply<unknown>>({ type: "OPEN_OPTIONS" }).catch((error) => renderError(runtimeErrorMessage(error)));
+      }));
       body.append(actions);
       ui.popover.hidden = false;
       requestAnimationFrame(() => {
@@ -271,7 +290,28 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
     };
 
     const translate = async () => {
-      if (!payload) return;
+      if (!cachedSelection) return;
+      const validated = validateSelection(cachedSelection.selectedText);
+      if (!validated.ok) {
+        const length = cachedSelection.selectedText.length;
+        if (length > 5000) {
+          const truncate = button("仅翻译前5000字符", "sr-action sr-action-primary", () => {
+            if (!cachedSelection) return;
+            cachedSelection.selectedText = cachedSelection.selectedText.slice(0, 5000);
+            void translate();
+          });
+          renderError(`选中的内容过长，请缩短到5000个字符以内。\n当前字符数：${length}`, undefined, truncate);
+        } else {
+          renderError(validated.reason ?? "请选择需要翻译的英文。");
+        }
+        return;
+      }
+      payload = {
+        text: validated.text,
+        title: options.pageTitle ?? document.title,
+        url: options.pageUrl ?? location.href,
+        selectedAt: cachedSelection.createdAt
+      };
       cancelRequest();
       const version = requestVersion;
       ui.trigger.hidden = true;
@@ -279,10 +319,21 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
       grammar = undefined;
       draggable.resetManualPosition();
       renderLoading();
-      const reply = await chrome.runtime.sendMessage({ type: "TRANSLATE", payload }) as Reply<TranslationResult>;
+      debug("request:send", { length: payload.text.length, frame: cachedSelection.frame });
+      let reply: Reply<TranslationResult>;
+      try {
+        reply = await sendMessage<Reply<TranslationResult>>({ type: "TRANSLATE", payload });
+      } catch (error) {
+        if (version !== requestVersion) return;
+        debug("request:error", runtimeErrorMessage(error));
+        renderError(runtimeErrorMessage(error), () => void translate());
+        return;
+      }
       if (version !== requestVersion) return;
       if (!reply.ok) return renderError(reply.error, () => void translate());
+      debug("request:success");
       translation = reply.result;
+      cachedSelection = undefined;
       renderSuccess(reply.saved);
     };
 
@@ -291,7 +342,14 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
       cancelRequest();
       const version = requestVersion;
       renderLoading("分析语法中");
-      const reply = await chrome.runtime.sendMessage({ type: "ANALYZE", payload }) as Reply<GrammarResult>;
+      let reply: Reply<GrammarResult>;
+      try {
+        reply = await sendMessage<Reply<GrammarResult>>({ type: "ANALYZE", payload });
+      } catch (error) {
+        if (version !== requestVersion) return;
+        renderError(runtimeErrorMessage(error), () => void analyze());
+        return;
+      }
       if (version !== requestVersion) return;
       if (!reply.ok) return renderError(reply.error, () => void analyze());
       grammar = reply.result;
@@ -299,27 +357,32 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
     };
 
     const useSelection = (text: string, rect: ViewportRect, range?: Range) => {
-      const validated = validateSelection(options.transformSelection?.(text) ?? text);
-      if (!validated.ok || !isLikelyEnglishSelection(validated.text)) return close();
+      const selectedText = options.transformSelection?.(text) ?? text;
+      const cleaned = selectedText.trim();
+      if (cleaned.length < 2 || !isLikelyEnglishSelection(cleaned)) return close();
       cancelRequest();
-      payload = {
-        text: validated.text,
-        title: options.pageTitle ?? document.title,
-        url: options.pageUrl ?? location.href,
-        selectedAt: Date.now()
+      const createdAt = Date.now();
+      cachedSelection = {
+        selectedText: cleaned,
+        selectionRect: rect,
+        range: range?.cloneRange(),
+        frame: window === window.top ? "top" : "iframe",
+        createdAt
       };
+      payload = undefined;
       rangeRect = rect;
-      selectionRange = range?.cloneRange();
+      selectionRange = cachedSelection.range;
       translation = undefined;
       grammar = undefined;
       ui.popover.hidden = true;
       ui.trigger.hidden = false;
       positionTrigger();
+      debug("selection:cached", { length: cleaned.length, frame: cachedSelection.frame });
       if (selectionBehavior === "auto") void translate();
     };
 
     const readSelection = (target?: EventTarget | null) => {
-      if (interacting) return;
+      if (!isCurrentMount() || interacting) return;
       const controlText = readTextControlSelection(target ?? document.activeElement);
       if (controlText) {
         const control = (target ?? document.activeElement) as HTMLInputElement | HTMLTextAreaElement;
@@ -328,7 +391,10 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
         return;
       }
       const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return close();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        if (!ui.trigger.hidden || !ui.popover.hidden) return;
+        return close();
+      }
       const activeRange = selection.getRangeAt(0);
       if (options.validateRange && !options.validateRange(activeRange)) {
         close();
@@ -340,7 +406,19 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
       useSelection(selection.toString(), rectValue(rect), activeRange);
     };
 
-    ui.trigger.addEventListener("click", () => void translate());
+    const protectTrigger = (event: Event) => {
+      protectTriggerEvent(event);
+      interacting = true;
+      debug(`trigger:${event.type}`);
+    };
+    ui.trigger.addEventListener("pointerdown", protectTrigger);
+    ui.trigger.addEventListener("mousedown", protectTrigger);
+    ui.trigger.addEventListener("click", (event) => {
+      protectTriggerEvent(event);
+      debug("trigger:click");
+      void translate();
+      queueMicrotask(() => { interacting = false; });
+    });
     ui.host.addEventListener("pointerdown", () => { interacting = true; });
     ui.host.addEventListener("pointerup", () => { queueMicrotask(() => { interacting = false; }); });
     ui.host.addEventListener("pointercancel", () => { interacting = false; });
@@ -352,14 +430,18 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
       }
     }, true);
     document.addEventListener("pointerdown", (event) => {
-      if (event.composedPath().includes(ui.host)) return;
+      if (!isCurrentMount()) return;
+      if (isReaderUiEvent(event, ui.host, ui.trigger, ui.popover)) return;
       close();
     }, true);
-    document.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); }, true);
+    document.addEventListener("keydown", (event) => {
+      if (isCurrentMount() && event.key === "Escape") close();
+    }, true);
     const refreshRangeRect = () => {
       if (selectionRange) rangeRect = rectValue(selectionRange.getBoundingClientRect());
     };
     addEventListener("resize", () => {
+      if (!isCurrentMount()) return;
       refreshRangeRect();
       if (!ui.popover.hidden) {
         if (!draggable.snapshot.hasManualPosition) positionPopover();
@@ -367,6 +449,7 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
       } else positionTrigger();
     }, { passive: true });
     addEventListener("scroll", () => {
+      if (!isCurrentMount()) return;
       if (!rangeRect) return;
       refreshRangeRect();
       if (!rangeRect) return;
@@ -376,7 +459,7 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
     }, { passive: true, capture: true });
 
     chrome.runtime.onMessage.addListener((message: RuntimeRequest) => {
-      if (message.type !== "CONTEXT_SELECTION") return;
+      if (!isCurrentMount() || message.type !== "CONTEXT_SELECTION") return;
       const selection = window.getSelection();
       const rect = selection?.rangeCount ? rectValue(selection.getRangeAt(0).getBoundingClientRect()) : {
         left: innerWidth / 2, right: innerWidth / 2, top: innerHeight / 2, bottom: innerHeight / 2, width: 0, height: 0

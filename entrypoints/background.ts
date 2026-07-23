@@ -26,6 +26,9 @@ async function runExclusive<T>(job: (signal: AbortSignal) => Promise<T>): Promis
 }
 
 export default defineBackground(() => {
+  const debug = (...values: unknown[]) => {
+    if (import.meta.env.DEV) console.debug("[Paper Reading Assistant]", ...values);
+  };
   chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
   chrome.action.onClicked.addListener(() => { void chrome.runtime.openOptionsPage(); });
 
@@ -110,6 +113,7 @@ export default defineBackground(() => {
       return true;
     }
     if (message.type === "TRANSLATE") {
+      debug("background:received", { type: message.type, length: message.payload.text.length });
       void (async () => {
         const config = await getConfig();
         if (!config.apiKey || !config.apiBaseUrl || !config.model) throw new Error("请先在设置中完成模型配置。");
@@ -121,7 +125,13 @@ export default defineBackground(() => {
           });
         }
         return { ok: true, result, saved: config.saveHistory };
-      })().then(respond).catch((error: unknown) => respond({ ok: false, error: error instanceof Error ? error.message : "翻译失败" }));
+      })().then((result) => {
+        debug("request:success");
+        respond(result);
+      }).catch((error: unknown) => {
+        debug("request:error", error instanceof Error ? error.name : "unknown");
+        respond({ ok: false, error: error instanceof Error ? error.message : "翻译失败" });
+      });
       return true;
     }
     if (message.type === "ANALYZE") {
