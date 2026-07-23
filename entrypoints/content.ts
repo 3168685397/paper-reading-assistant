@@ -1,11 +1,12 @@
 import { calculatePopoverPosition, type ViewportRect } from "../src/lib/selection/calculatePopoverPosition";
-import { selectionButtonPosition, validateSelection } from "../src/lib/selection";
-import { element, mountScienceReaderRoot } from "../src/lib/popover/dom";
+import { isLikelyEnglishSelection, readTextControlSelection, selectionButtonPosition, validateSelection } from "../src/lib/selection";
+import { element, hasReaderRoot, mountScienceReaderRoot } from "../src/lib/popover/dom";
 import { popoverCss } from "../src/lib/popover/styles";
 import { DraggablePopover } from "../src/lib/drag/draggablePopover";
 import { createAccordion } from "../src/lib/popover/accordion";
 import type { GrammarResult, TranslationResult } from "../src/lib/llm/schemas";
-import type { RuntimeRequest, SelectionPayload } from "../src/types";
+import { isSiteExcluded } from "../src/lib/sites";
+import type { ContentSettings, RuntimeRequest, SelectionPayload } from "../src/types";
 
 type Reply<T> = { ok: true; result: T; saved?: boolean } | { ok: false; error: string };
 
@@ -14,8 +15,15 @@ function rectValue(rect: DOMRect): ViewportRect {
 }
 
 export default defineContentScript({
-  matches: ["https://www.science.org/*"],
-  main() {
+  registration: "runtime",
+  allFrames: true,
+  matchAboutBlank: true,
+  matchOriginAsFallback: true,
+  async main() {
+    if (hasReaderRoot(document)) return;
+    const settingsReply = await chrome.runtime.sendMessage({ type: "GET_CONTENT_SETTINGS" }) as Reply<ContentSettings>;
+    if (!settingsReply.ok || settingsReply.result.selectionBehavior === "disabled" || isSiteExcluded(location.hostname, settingsReply.result.excludedSites)) return;
+    const selectionBehavior = settingsReply.result.selectionBehavior;
     const ui = mountScienceReaderRoot(document, popoverCss);
     const draggable = new DraggablePopover(ui.popover);
     let payload: SelectionPayload | undefined;
@@ -280,7 +288,7 @@ export default defineContentScript({
 
     const useSelection = (text: string, rect: ViewportRect, range?: Range) => {
       const validated = validateSelection(text);
-      if (!validated.ok) return close();
+      if (!validated.ok || !isLikelyEnglishSelection(validated.text)) return close();
       cancelRequest();
       payload = { text: validated.text, title: document.title, url: location.href, selectedAt: Date.now() };
       rangeRect = rect;
@@ -290,10 +298,18 @@ export default defineContentScript({
       ui.popover.hidden = true;
       ui.trigger.hidden = false;
       positionTrigger();
+      if (selectionBehavior === "auto") void translate();
     };
 
-    const readSelection = () => {
+    const readSelection = (target?: EventTarget | null) => {
       if (interacting) return;
+      const controlText = readTextControlSelection(target ?? document.activeElement);
+      if (controlText) {
+        const control = (target ?? document.activeElement) as HTMLInputElement | HTMLTextAreaElement;
+        const rect = control.getBoundingClientRect();
+        useSelection(controlText, rectValue(rect));
+        return;
+      }
       const selection = window.getSelection();
       if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return close();
       const rect = selection.getRangeAt(0).getBoundingClientRect();
@@ -305,7 +321,13 @@ export default defineContentScript({
     ui.host.addEventListener("pointerdown", () => { interacting = true; });
     ui.host.addEventListener("pointerup", () => { queueMicrotask(() => { interacting = false; }); });
     ui.host.addEventListener("pointercancel", () => { interacting = false; });
-    document.addEventListener("selectionchange", () => requestAnimationFrame(readSelection));
+    document.addEventListener("selectionchange", () => requestAnimationFrame(() => readSelection()));
+    document.addEventListener("pointerup", (event) => requestAnimationFrame(() => readSelection(event.target)), true);
+    document.addEventListener("keyup", (event) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        requestAnimationFrame(() => readSelection(event.target));
+      }
+    }, true);
     document.addEventListener("pointerdown", (event) => {
       if (event.composedPath().includes(ui.host)) return;
       close();

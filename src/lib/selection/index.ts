@@ -11,6 +11,23 @@ export function validateSelection(text: string): { ok: boolean; text: string; re
   return { ok: true, text: cleaned };
 }
 
+export function isLikelyEnglishSelection(text: string): boolean {
+  const cleaned = cleanSelection(text);
+  const letters = cleaned.match(/[A-Za-z]/g)?.length ?? 0;
+  const visible = cleaned.match(/[^\s]/g)?.length ?? 0;
+  const hasWord = /[A-Za-z]{2,}/.test(cleaned);
+  return visible >= 2 && letters >= 2 && hasWord && letters / visible >= 0.25;
+}
+
+export function readTextControlSelection(target: EventTarget | null): string | undefined {
+  if (!(target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)) return undefined;
+  if (target instanceof HTMLInputElement && !["text", "search", "email", "url", "tel"].includes(target.type)) return undefined;
+  const start = target.selectionStart;
+  const end = target.selectionEnd;
+  if (start === null || end === null || start === end) return undefined;
+  return target.value.slice(start, end);
+}
+
 export interface RectLike { right: number; bottom: number }
 export function selectionButtonPosition(rect: RectLike, viewportWidth: number, viewportHeight: number) {
   return {

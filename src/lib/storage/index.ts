@@ -1,17 +1,26 @@
-import type { HistoryRecord, ModelConfig, SelectionPayload } from "../../types";
+import type { ContentSettings, HistoryRecord, ModelConfig, SelectionPayload } from "../../types";
 
 export const defaults: ModelConfig = {
   apiBaseUrl: "https://api.openai.com/v1",
   model: "gpt-4.1-mini",
   apiKey: "",
   language: "简体中文",
-  autoTranslate: true,
+  selectionBehavior: "button",
+  includePageContext: false,
+  excludedSites: [],
   saveHistory: true
 };
 
 export async function getConfig(): Promise<ModelConfig> {
   const { modelConfig } = await chrome.storage.local.get("modelConfig");
   return { ...defaults, ...(modelConfig as Partial<ModelConfig> | undefined) };
+}
+
+export function toContentSettings(config: ModelConfig): ContentSettings {
+  return {
+    selectionBehavior: config.selectionBehavior,
+    excludedSites: [...config.excludedSites]
+  };
 }
 
 export async function getSelection(): Promise<SelectionPayload | undefined> {

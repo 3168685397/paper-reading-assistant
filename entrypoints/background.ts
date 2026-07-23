@@ -1,6 +1,8 @@
 import { openAiCompatible } from "../src/lib/llm/openaiCompatible";
 import { replaceAbortController } from "../src/lib/llm/requestControl";
-import { attachGrammar, getConfig, saveRecord } from "../src/lib/storage";
+import { attachGrammar, getConfig, saveRecord, toContentSettings } from "../src/lib/storage";
+import { chromeRegistrationApi, injectIntoOpenPages, syncContentScriptRegistration, WEBSITE_ORIGINS } from "../src/lib/permissions/contentScriptRegistration";
+import { normalizeHostname } from "../src/lib/sites";
 import type { RuntimeRequest } from "../src/types";
 
 let activeController: AbortController | undefined;
@@ -26,17 +28,32 @@ export default defineBackground(() => {
   chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
   chrome.action.onClicked.addListener(() => { void chrome.runtime.openOptionsPage(); });
 
+  const syncRegistration = () => syncContentScriptRegistration(chromeRegistrationApi());
+
+  void syncRegistration();
+  chrome.runtime.onStartup.addListener(() => { void syncRegistration(); });
+  chrome.permissions.onAdded.addListener((permissions) => {
+    if (permissions.origins?.some((origin) => WEBSITE_ORIGINS.includes(origin as typeof WEBSITE_ORIGINS[number]))) {
+      void syncRegistration().then(() => injectIntoOpenPages());
+    }
+  });
+  chrome.permissions.onRemoved.addListener((permissions) => {
+    if (permissions.origins?.some((origin) => WEBSITE_ORIGINS.includes(origin as typeof WEBSITE_ORIGINS[number]))) {
+      void syncRegistration();
+    }
+  });
+
   chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create({
-      id: "science-reader-selection",
+    void syncRegistration();
+    chrome.contextMenus.removeAll(() => chrome.contextMenus.create({
+      id: "paper-reading-assistant-selection",
       title: "翻译并精读选中文本",
-      contexts: ["selection"],
-      documentUrlPatterns: ["https://www.science.org/*"]
-    });
+      contexts: ["selection"]
+    }));
   });
 
   chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId !== "science-reader-selection" || !info.selectionText || !tab?.id) return;
+    if (info.menuItemId !== "paper-reading-assistant-selection" || !info.selectionText || !tab?.id) return;
     void chrome.tabs.sendMessage(tab.id, {
       type: "CONTEXT_SELECTION",
       payload: {
@@ -45,7 +62,7 @@ export default defineBackground(() => {
         url: tab.url ?? "",
         selectedAt: Date.now()
       }
-    } satisfies RuntimeRequest);
+    } satisfies RuntimeRequest, info.frameId === undefined ? undefined : { frameId: info.frameId });
   });
 
   chrome.runtime.onMessage.addListener((message: RuntimeRequest, sender, respond) => {
@@ -56,6 +73,21 @@ export default defineBackground(() => {
     }
     if (message.type === "OPEN_OPTIONS") {
       void chrome.runtime.openOptionsPage().then(() => respond({ ok: true }));
+      return true;
+    }
+    if (message.type === "GET_CONTENT_SETTINGS") {
+      void getConfig().then((config) => {
+        const host = sender.url ? normalizeHostname(sender.url) : undefined;
+        if (host) void chrome.storage.session.set({ lastSiteHost: host });
+        respond({ ok: true, result: toContentSettings(config) });
+      });
+      return true;
+    }
+    if (message.type === "GET_LAST_SITE") {
+      void chrome.storage.session.get("lastSiteHost").then(({ lastSiteHost }) => respond({
+        ok: true,
+        result: typeof lastSiteHost === "string" ? lastSiteHost : ""
+      }));
       return true;
     }
     if (message.type === "TRANSLATE") {

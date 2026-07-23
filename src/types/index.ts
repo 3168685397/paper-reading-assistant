@@ -12,8 +12,17 @@ export interface ModelConfig {
   model: string;
   apiKey: string;
   language: string;
-  autoTranslate: boolean;
+  selectionBehavior: SelectionBehavior;
+  includePageContext: boolean;
+  excludedSites: string[];
   saveHistory: boolean;
+}
+
+export type SelectionBehavior = "button" | "auto" | "disabled";
+
+export interface ContentSettings {
+  selectionBehavior: SelectionBehavior;
+  excludedSites: string[];
 }
 
 export interface HistoryRecord {
@@ -31,4 +40,6 @@ export type RuntimeRequest =
   | { type: "ANALYZE"; payload: SelectionPayload }
   | { type: "CANCEL_REQUEST" }
   | { type: "OPEN_OPTIONS" }
+  | { type: "GET_CONTENT_SETTINGS" }
+  | { type: "GET_LAST_SITE" }
   | { type: "CONTEXT_SELECTION"; payload: SelectionPayload };
