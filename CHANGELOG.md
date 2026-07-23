@@ -1,5 +1,25 @@
 # Changelog / 变更记录
 
+## 0.3.0
+
+### English
+
+- Added an extension-hosted PDF reader for remote and local text-based PDFs.
+- Added bundled PDF.js Canvas rendering, selectable Text Layers, viewport-near lazy rendering, zoom, rotation, page navigation, and a collapsible page sidebar.
+- Reused the existing selected-text trigger, draggable translation popover, model requests, grammar analysis, vocabulary, copy, cancellation, and local history.
+- Added password, damaged-file, remote-access, loading-progress, and scanned-PDF states.
+- Added English and Simplified Chinese PDF reader UI.
+- Kept complete PDF files, local paths, and passwords out of model requests and persistent storage.
+
+### 简体中文
+
+- 新增扩展内部的远程与本地文本型 PDF 阅读器。
+- 新增内置 PDF.js Canvas 渲染、可选择 Text Layer、视口附近按需渲染、缩放、旋转、页码跳转和可折叠页面侧栏。
+- 复用现有划词按钮、可拖动翻译卡片、模型请求、语法分析、词汇、复制、取消和本地历史。
+- 新增密码、损坏文件、远程访问、加载进度和扫描版 PDF 状态。
+- 新增英文和简体中文 PDF 阅读器界面。
+- 完整 PDF、本地路径和密码不会进入模型请求或持久化存储。
+
 ## 0.2.0
 
 ### English

@@ -3,6 +3,7 @@ import { replaceAbortController } from "../src/lib/llm/requestControl";
 import { attachGrammar, getConfig, saveRecord, toContentSettings } from "../src/lib/storage";
 import { chromeRegistrationApi, injectIntoOpenPages, syncContentScriptRegistration, WEBSITE_ORIGINS } from "../src/lib/permissions/contentScriptRegistration";
 import { normalizeHostname } from "../src/lib/sites";
+import { isLikelyPdfUrl, parseRemotePdfUrl } from "../src/features/pdf/pdfSource";
 import type { RuntimeRequest } from "../src/types";
 
 let activeController: AbortController | undefined;
@@ -88,6 +89,24 @@ export default defineBackground(() => {
         ok: true,
         result: typeof lastSiteHost === "string" ? lastSiteHost : ""
       }));
+      return true;
+    }
+    if (message.type === "CHECK_PDF_URL") {
+      void (async () => {
+        const url = parseRemotePdfUrl(message.url);
+        if (!url) return { ok: true, result: false };
+        if (isLikelyPdfUrl(url.href)) return { ok: true, result: true };
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8_000);
+        try {
+          const response = await fetch(url, { method: "HEAD", credentials: "include", signal: controller.signal });
+          return { ok: true, result: response.ok && response.headers.get("content-type")?.toLowerCase().includes("application/pdf") === true };
+        } catch {
+          return { ok: true, result: false };
+        } finally {
+          clearTimeout(timeout);
+        }
+      })().then(respond);
       return true;
     }
     if (message.type === "TRANSLATE") {

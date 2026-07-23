@@ -29,6 +29,12 @@ The project includes no public API key and is not currently in the Chrome Web St
 - Domain-only exclusion list
 - Configurable OpenAI-compatible API and up to 50 local reading records
 
+## PDF Reader
+
+Version 0.3.0 adds an extension-hosted reading mode for remote and local text-based PDFs. Open a PDF link from the extension menu, or choose a local PDF inside the reader. PDF.js and its worker are bundled with the extension; files are parsed locally with Canvas rendering and a selectable Text Layer.
+
+The complete PDF is never sent to a model. Only text explicitly selected by the user uses the existing translation and study request. Chrome's built-in PDF viewer is not injected. Scanned or image-only PDFs do not support OCR yet, and authenticated remote PDFs may need to be downloaded and opened locally.
+
 ## API Setup
 
 Configure the API base URL, model, API key, and target language in extension settings. The provider must support OpenAI-compatible chat completions. API keys stay in trusted extension storage and model requests run only in the Background Service Worker.
@@ -48,7 +54,7 @@ pnpm build
 pnpm zip
 ```
 
-The unpacked extension is generated at `.output/chrome-mv3/`. The production package is `.output/paper-reading-assistant-0.2.0-chrome.zip`.
+The unpacked extension is generated at `.output/chrome-mv3/`. The development package is `.output/paper-reading-assistant-0.3.0-chrome.zip`.
 
 ## Privacy and Permissions
 
@@ -57,6 +63,7 @@ Paper Reading Assistant reads only text the user explicitly selects. It does not
 - `storage`: trusted model settings, domain exclusions, and local reading records
 - `contextMenus`: selected-text command
 - `scripting`: runtime registration after permission is granted
+- `activeTab`: inspect the current tab only after the user opens the extension menu to launch the PDF reader
 - optional `http://*/*` and `https://*/*`: requested only when the user enables website access
 - an API origin: requested when API configuration is saved
 
@@ -66,14 +73,18 @@ Content Scripts cannot read the API key. Exclusions store hostnames only, not fu
 
 - Browser internal pages, extension pages, the Chrome Web Store, `file://`, FTP, `view-source:`, and other protected pages are unsupported.
 - Text rendered only in images or canvas requires future OCR support.
-- Browser PDF viewers may restrict injection or selection behavior.
+- Chrome's built-in PDF viewer is not injected; use the extension PDF reader.
+- Scanned PDFs, image-only PDFs, and text in canvas do not support OCR.
+- Cross-page PDF selections are limited to one page in this first version.
+- Mathematical formulas and multi-column reading order require careful testing.
+- Authenticated or temporary remote PDF links may need local download.
 - A cross-origin iframe popover remains inside that iframe's viewport.
 - Closed Shadow DOM selections are not observable.
 - A user-provided compatible model API is required.
 
 ## Public Beta
 
-Version `v0.2.0` is under development on a feature branch and is not released yet. Testing should cover academic sites, news, blogs, tables, SPAs, multi-column layouts, form controls, iframes, dark pages, and long selections. Remove API keys, private text, and personal information before sharing reports.
+Version `v0.2.0` is released. Version `v0.3.0` PDF reading mode is under development on a feature branch. Remove API keys, private text, PDF passwords, and personal information before sharing reports.
 
 ## Roadmap
 

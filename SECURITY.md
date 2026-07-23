@@ -17,3 +17,5 @@ Use GitHub private vulnerability reporting: open the repository's **Security** t
 Do not disclose vulnerabilities in a public Issue, Discussion, or Pull Request. Include the affected version, impact, reproduction steps, and suggested mitigation. Remove API keys, credentials, selected private text, and personal information.
 
 Maintainers will acknowledge valid private reports after review and coordinate remediation and disclosure with the reporter. No fixed response or resolution time is guaranteed.
+
+PDF files and passwords are processed locally and are not retained by the extension. Reports must not attach private PDFs, passwords, signed URLs, or selected confidential text.

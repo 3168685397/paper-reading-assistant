@@ -42,4 +42,5 @@ export type RuntimeRequest =
   | { type: "OPEN_OPTIONS" }
   | { type: "GET_CONTENT_SETTINGS" }
   | { type: "GET_LAST_SITE" }
+  | { type: "CHECK_PDF_URL"; url: string }
   | { type: "CONTEXT_SELECTION"; payload: SelectionPayload };
