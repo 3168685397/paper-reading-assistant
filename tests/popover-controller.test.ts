@@ -78,6 +78,25 @@ describe("selection trigger integration", () => {
     expect(shadow.querySelector(".sr-status")?.textContent).toContain("翻译");
   });
 
+  it("opens the loading popover on pointerup even when the website suppresses click", async () => {
+    const trigger = await mountedTrigger();
+    trigger.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true, composed: true }));
+    trigger.dispatchEvent(new Event("pointerup", { bubbles: true, cancelable: true, composed: true }));
+    const shadow = document.getElementById(ROOT_ID)!.shadowRoot!;
+    expect(translatePayload?.payload?.text).toBe("Cambridge Core selected abstract text.");
+    expect(shadow.querySelector<HTMLElement>(".sr-popover")!.hidden).toBe(false);
+    expect(shadow.querySelector(".sr-status")?.textContent).toContain("翻译");
+  });
+
+  it("does not send twice when pointerup is followed by click", async () => {
+    const trigger = await mountedTrigger();
+    trigger.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true, composed: true }));
+    trigger.dispatchEvent(new Event("pointerup", { bubbles: true, cancelable: true, composed: true }));
+    const firstPayload = translatePayload;
+    trigger.click();
+    expect(translatePayload).toBe(firstPayload);
+  });
+
   it("is not closed by Cambridge Core-style document click listeners", async () => {
     const trigger = await mountedTrigger();
     document.addEventListener("click", (event) => event.stopPropagation(), { once: true });

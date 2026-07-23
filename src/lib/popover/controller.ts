@@ -406,18 +406,42 @@ export async function startSelectionTranslationUi(options: SelectionTranslationU
       useSelection(selection.toString(), rectValue(rect), activeRange);
     };
 
+    let triggerPointerActive = false;
+    let suppressNextTriggerClick = false;
     const protectTrigger = (event: Event) => {
       protectTriggerEvent(event);
       interacting = true;
       debug(`trigger:${event.type}`);
     };
-    ui.trigger.addEventListener("pointerdown", protectTrigger);
+    const activateTrigger = () => {
+      debug("trigger:activate");
+      void translate();
+      queueMicrotask(() => { interacting = false; });
+    };
+    ui.trigger.addEventListener("pointerdown", (event) => {
+      protectTrigger(event);
+      triggerPointerActive = true;
+    });
     ui.trigger.addEventListener("mousedown", protectTrigger);
+    ui.trigger.addEventListener("pointerup", (event) => {
+      protectTriggerEvent(event);
+      if (!triggerPointerActive) return;
+      triggerPointerActive = false;
+      suppressNextTriggerClick = true;
+      activateTrigger();
+    });
+    ui.trigger.addEventListener("pointercancel", () => {
+      triggerPointerActive = false;
+      interacting = false;
+    });
     ui.trigger.addEventListener("click", (event) => {
       protectTriggerEvent(event);
       debug("trigger:click");
-      void translate();
-      queueMicrotask(() => { interacting = false; });
+      if (suppressNextTriggerClick) {
+        suppressNextTriggerClick = false;
+        return;
+      }
+      activateTrigger();
     });
     ui.host.addEventListener("pointerdown", () => { interacting = true; });
     ui.host.addEventListener("pointerup", () => { queueMicrotask(() => { interacting = false; }); });
